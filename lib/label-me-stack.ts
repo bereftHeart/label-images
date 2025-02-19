@@ -1,10 +1,13 @@
 import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as s3 from "aws-cdk-lib/aws-s3";
+import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
 
 export class LabelMeStack extends cdk.Stack {
@@ -29,24 +32,24 @@ export class LabelMeStack extends cdk.Stack {
     });
 
     // S3 bucket for hosting the frontend
-    // const websiteBucket = new s3.Bucket(this, 'WebsiteBucket', {
-    //   websiteIndexDocument: 'index.html',
-    //   publicReadAccess: true,
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
-    //   autoDeleteObjects: true,
-    // });
+    const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
+      websiteIndexDocument: "index.html",
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
 
     // CloudFront distribution for the frontend
-    // const distribution = new cloudfront.Distribution(this, 'Distribution', {
-    //   defaultBehavior: {
-    //     origin: new origins.S3Origin(websiteBucket),
-    //   },
-    //   additionalBehaviors: {
-    //     '/images/*': {
-    //       origin: new origins.S3Origin(imageBucket),
-    //     },
-    //   },
-    // });
+    const distribution = new cloudfront.Distribution(this, "Distribution", {
+      defaultBehavior: {
+        origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket),
+      },
+      additionalBehaviors: {
+        "/images/*": {
+          origin: origins.S3BucketOrigin.withOriginAccessIdentity(imageBucket),
+        },
+      },
+    });
 
     // DynamoDB table for storing image metadata
     const imageTable = new dynamodb.Table(this, "ImageTable", {
@@ -75,10 +78,20 @@ export class LabelMeStack extends cdk.Stack {
       preventUserExistenceErrors: true,
     });
 
+    // Log group for API Gateway
+    const logGroup = new logs.LogGroup(this, "ApiLogGroup", {
+      logGroupName: `/aws/api/label-me`,
+      retention: logs.RetentionDays.ONE_WEEK, // Keep logs for one week
+      removalPolicy: cdk.RemovalPolicy.DESTROY, // Remove logs when stack is deleted
+    });
 
     // API Gateway
     const api = new apigateway.RestApi(this, "ImageLabelingApi", {
       restApiName: "Image Labeling API",
+      deployOptions: {
+        accessLogDestination: new apigateway.LogGroupLogDestination(logGroup),
+        accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields(),
+      },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
@@ -99,13 +112,6 @@ export class LabelMeStack extends cdk.Stack {
       authorizer,
       authorizationType: apigateway.AuthorizationType.COGNITO,
     };
-
-    // Log group for API Gateway
-    const logGroup = new logs.LogGroup(this, "ApiLogGroup", {
-      logGroupName: `/aws/api/label-me`,
-      retention: logs.RetentionDays.ONE_WEEK, // Keep logs for one week
-      removalPolicy: cdk.RemovalPolicy.DESTROY, // Remove logs when stack is deleted
-    });
 
     // Lambda functions
     const labelImagesFunction = new NodejsFunction(
@@ -147,15 +153,22 @@ export class LabelMeStack extends cdk.Stack {
     const authResource = api.root.addResource("auth");
 
     const labelImagesIntegration = new apigateway.LambdaIntegration(
-      labelImagesFunction
+      labelImagesFunction,
+      {
+        proxy: true,
+      }
     );
 
-    const userIntegration = new apigateway.LambdaIntegration(userFunction);
+    const userIntegration = new apigateway.LambdaIntegration(userFunction, {
+      proxy: true,
+    });
 
     // No auth required for signup, login and fetch images
     authResource.addResource("signup").addMethod("POST", userIntegration);
     authResource.addResource("verify-user").addMethod("POST", userIntegration);
-    authResource.addResource("resend-verification").addMethod("POST", userIntegration);
+    authResource
+      .addResource("resend-verification")
+      .addMethod("POST", userIntegration);
     authResource.addResource("login").addMethod("POST", userIntegration);
 
     imagesResource.addMethod("GET", labelImagesIntegration);
@@ -170,20 +183,28 @@ export class LabelMeStack extends cdk.Stack {
     imagesResource
       .addResource("external")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
-    imagesResource.addMethod("PUT", labelImagesIntegration, authorizationOptions);
+    imagesResource.addMethod(
+      "PUT",
+      labelImagesIntegration,
+      authorizationOptions
+    );
 
     // Deploy frontend
-    // new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-    //   sources: [s3deploy.Source.asset('./frontend/build')],
-    //   destinationBucket: websiteBucket,
-    //   distribution,
-    //   distributionPaths: ['/*'],
-    // });
+    new s3deploy.BucketDeployment(this, "DeployWebsite", {
+      sources: [s3deploy.Source.asset("./frontend/build")],
+      destinationBucket: websiteBucket,
+      distribution,
+      distributionPaths: ["/*"],
+      metadata: {
+        API_BASE_URL: api.url ?? "",
+        API_NAME: api.restApiName ?? "",
+      },
+    });
 
     // Outputs
-    // new cdk.CfnOutput(this, "WebsiteURL", {
-    //   value: `https://${distribution.distributionDomainName}`,
-    // });
+    new cdk.CfnOutput(this, "WebsiteURL", {
+      value: `https://${distribution.distributionDomainName}`,
+    });
     new cdk.CfnOutput(this, "UserPoolId", {
       value: userPool.userPoolId,
     });
