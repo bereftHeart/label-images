@@ -1,17 +1,18 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
-import { response } from "../utils/response";
 import {
-  fetchImage,
+  storeExternalImage,
   getImages,
   labelImage,
   uploadImage,
+  deleteImages,
 } from "../handlers/imageHandler";
+import { response } from "../utils/response";
 
 export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
   try {
     switch (event.httpMethod) {
       case "GET":
-        return await getImages();
+        return await getImages(event);
       case "POST":
         const path = event.resource;
 
@@ -19,8 +20,12 @@ export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
           return await uploadImage(event);
         }
 
-        if (path === "/label-images/fetch-external") {
-          return await fetchImage(event);
+        if (path === "/label-images/external") {
+          return await storeExternalImage(event);
+        }
+
+        if (path === "/label-images/bulk-delete") {
+          return await deleteImages(event);
         }
 
         return response(400, "Bad Request");

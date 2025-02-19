@@ -72,7 +72,9 @@ export class LabelMeStack extends cdk.Stack {
         userPassword: true,
         userSrp: true,
       },
+      preventUserExistenceErrors: true,
     });
+
 
     // API Gateway
     const api = new apigateway.RestApi(this, "ImageLabelingApi", {
@@ -89,6 +91,7 @@ export class LabelMeStack extends cdk.Stack {
       "ImageLabelingAuthorizer",
       {
         cognitoUserPools: [userPool],
+        identitySource: "method.request.header.Authorization",
       }
     );
 
@@ -111,6 +114,7 @@ export class LabelMeStack extends cdk.Stack {
       {
         entry: "src/functions/image.ts",
         handler: "lambdaHandler",
+        timeout: cdk.Duration.seconds(10),
         environment: {
           TABLE_NAME: imageTable.tableName,
           BUCKET_NAME: imageBucket.bucketName,
@@ -142,23 +146,31 @@ export class LabelMeStack extends cdk.Stack {
     const imagesResource = api.root.addResource("label-images");
     const authResource = api.root.addResource("auth");
 
-    const getImagesIntegration = new apigateway.LambdaIntegration(
+    const labelImagesIntegration = new apigateway.LambdaIntegration(
       labelImagesFunction
     );
 
     const userIntegration = new apigateway.LambdaIntegration(userFunction);
 
-    imagesResource.addMethod("GET", getImagesIntegration, authorizationOptions);
+    // No auth required for signup, login and fetch images
+    authResource.addResource("signup").addMethod("POST", userIntegration);
+    authResource.addResource("verify-user").addMethod("POST", userIntegration);
+    authResource.addResource("resend-verification").addMethod("POST", userIntegration);
+    authResource.addResource("login").addMethod("POST", userIntegration);
+
+    imagesResource.addMethod("GET", labelImagesIntegration);
+
+    // Auth required for uploading, fetching external and labeling images
     imagesResource
       .addResource("upload")
-      .addMethod("POST", getImagesIntegration, authorizationOptions);
+      .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource
-      .addResource("fetch-external")
-      .addMethod("POST", getImagesIntegration, authorizationOptions);
-    imagesResource.addMethod("PUT", getImagesIntegration, authorizationOptions);
-
-    authResource.addResource("signup").addMethod("POST", userIntegration);
-    authResource.addResource("login").addMethod("POST", userIntegration);
+      .addResource("bulk-delete")
+      .addMethod("POST", labelImagesIntegration, authorizationOptions);
+    imagesResource
+      .addResource("external")
+      .addMethod("POST", labelImagesIntegration, authorizationOptions);
+    imagesResource.addMethod("PUT", labelImagesIntegration, authorizationOptions);
 
     // Deploy frontend
     // new s3deploy.BucketDeployment(this, 'DeployWebsite', {

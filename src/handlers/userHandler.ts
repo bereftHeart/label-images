@@ -1,8 +1,9 @@
 import {
-  AdminConfirmSignUpCommand,
   CognitoIdentityProviderClient,
+  ConfirmSignUpCommand,
   InitiateAuthCommand,
-  SignUpCommand,
+  ResendConfirmationCodeCommand,
+  SignUpCommand
 } from "@aws-sdk/client-cognito-identity-provider";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { response } from "../utils/response";
@@ -12,7 +13,6 @@ const cognito = new CognitoIdentityProviderClient({
 });
 
 const CLIENT_ID = process.env.CLIENT_ID!;
-const USER_POOL_ID = process.env.USER_POOL_ID!;
 
 /*
  * Create a new user
@@ -34,25 +34,78 @@ export const createUser = async (event: APIGatewayProxyEvent) => {
       UserAttributes: [{ Name: "email", Value: email }],
     });
 
-    const res = await cognito.send(command);
-    if (res.$metadata.httpStatusCode !== 200) {
-      throw new Error("Failed to create user");
-    }
+    await cognito.send(command);
 
-    // Auto-confirm the user
-    await cognito.send(
-      new AdminConfirmSignUpCommand({
-        UserPoolId: USER_POOL_ID,
-        Username: email,
-      })
-    );
-
-    return response(200, "User created successfully");
+    return response(200, "User created successfully. Please verify your email.");
   } catch (error: any) {
+    if (error.name === "UsernameExistsException") {
+      return response(409, "User already exists");
+    }
     console.error(error);
     return response(400, error?.message || "Failed to create user");
   }
 };
+
+/*
+ * Verify User (Confirm SignUp)
+ */
+export const verifyUser = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) {
+    return response(400, "Missing request body");
+  }
+  try {
+    const { email, code } = JSON.parse(event.body);
+    if (!email || !code) {
+      return response(400, "Missing required fields");
+    }
+
+    const command = new ConfirmSignUpCommand({
+      ClientId: CLIENT_ID,
+      Username: email,
+      ConfirmationCode: code,
+    });
+
+    await cognito.send(command);
+
+    return response(200, "User verified successfully. You can now log in.");
+  } catch (error: any) {
+    if (error.name === "CodeMismatchException") {
+      return response(400, "Invalid verification code. Please try again.");
+    }
+    if (error.name === "ExpiredCodeException") {
+      return response(400, "Verification code has expired. Request a new one.");
+    }
+    console.error(error);
+    return response(400, error?.message || "Failed to verify user");
+  }
+}
+
+/*
+  * Resend Verification Code
+  */
+export const resendVerificationCode = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) {
+    return response(400, "Missing request body");
+  }
+  try {
+    const { email } = JSON.parse(event.body);
+    if (!email) {
+      return response(400, "Missing required fields");
+    }
+
+    const command = new ResendConfirmationCodeCommand({
+      ClientId: CLIENT_ID,
+      Username: email,
+    });
+
+    await cognito.send(command);
+
+    return response(200, "Verification code resent successfully.");
+  } catch (error: any) {
+    console.error(error);
+    return response(400, error?.message || "Failed to resend verification code");
+  }
+}
 
 /*
  * Login a user
@@ -74,9 +127,10 @@ export const loginUser = async (event: APIGatewayProxyEvent) => {
     });
 
     const res = await cognito.send(command);
+    console.log("Login successful:", res.AuthenticationResult);
 
-    if (res.$metadata.httpStatusCode !== 200) {
-      throw new Error("Failed to login user");
+    if (!res.AuthenticationResult) {
+      throw new Error("Failed to authenticate user");
     }
 
     return response(200, {
@@ -85,6 +139,9 @@ export const loginUser = async (event: APIGatewayProxyEvent) => {
       refreshToken: res.AuthenticationResult?.RefreshToken,
     });
   } catch (error: any) {
+    if (error.name === "NotAuthorizedException") {
+      return response(401, "Incorrect email or password");
+    }
     console.error(error);
     return response(400, "Failed to login user");
   }

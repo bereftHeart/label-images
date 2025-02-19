@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
+import { createUser, loginUser, resendVerificationCode, verifyUser } from "../handlers/userHandler";
 import { response } from "../utils/response";
-import { createUser, loginUser } from "../handlers/userHandler";
 
 export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
   try {
@@ -12,6 +12,14 @@ export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
 
     if (path === "/auth/signup") {
       return await createUser(event);
+    }
+
+    if (path === "/auth/verify-user") {
+      return await verifyUser(event);
+    }
+
+    if (path === "/auth/resend-verification") {
+      return await resendVerificationCode(event);
     }
 
     if (path === "/auth/login") {

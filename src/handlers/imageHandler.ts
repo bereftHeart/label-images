@@ -1,5 +1,13 @@
-import { DynamoDB, ReturnValue, ScanCommand } from "@aws-sdk/client-dynamodb";
-import { PutObjectCommand, S3 } from "@aws-sdk/client-s3";
+import {
+  DynamoDB,
+  ReturnValue,
+  ScanCommand,
+} from "@aws-sdk/client-dynamodb";
+import {
+  GetObjectCommand,
+  S3
+} from "@aws-sdk/client-s3";
+import { DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { v4 as uuidv4 } from "uuid";
@@ -11,58 +19,89 @@ const TABLE_NAME = process.env.TABLE_NAME || "ImageTable";
 const BUCKET_NAME = process.env.BUCKET_NAME || "ImageBucket";
 
 /*
- * Get all images from the DynamoDB table
+ * Get paginated images from DynamoDB
  */
-export const getImages = async () => {
+export const getImages = async (event: APIGatewayProxyEvent) => {
+  const queryParams = event.queryStringParameters || {};
+  const limit = Number(queryParams.limit) || 10;
+  const lastEvaluatedKey = queryParams.lastKey
+    ? JSON.parse(decodeURIComponent(queryParams.lastKey))
+    : undefined;
+
   const command = new ScanCommand({
     TableName: TABLE_NAME,
+    Limit: limit,
+    ExclusiveStartKey: lastEvaluatedKey,
   });
 
   try {
     const data = await dynamodb.send(command);
-    if (!data.Items) {
-      return response(404, "No images found");
-    }
+    if (!data.Items) return response(404, "No images found");
+
+    const now = new Date().toISOString();
 
     const images = await Promise.all(
       data.Items.map(async (item) => {
-        const url = getSignedUrl(
-          s3,
-          new PutObjectCommand({
-            Bucket: BUCKET_NAME,
-            Key: item.s3key.S,
-          }),
-          { expiresIn: 3600 }
-        );
+        let imageUrl = item.url?.S;
+        let signedUrlExpiresAt = item.signedUrlExpiresAt?.S;
+
+        if (!item.isExternal?.BOOL) {
+          // If signed URL is missing or expired, generate a new one
+          if (!imageUrl || !signedUrlExpiresAt || signedUrlExpiresAt < now) {
+            imageUrl = await getSignedUrl(
+              s3,
+              new GetObjectCommand({
+                Bucket: BUCKET_NAME,
+                Key: item.s3Key?.S,
+              }),
+              { expiresIn: 3600 }
+            );
+
+            // Update DynamoDB with new signed URL and expiration
+            await dynamodb.send(
+              new UpdateCommand({
+                TableName: TABLE_NAME,
+                Key: { id: item.id?.S },
+                UpdateExpression:
+                  "SET #url = :url, signedUrlExpiresAt = :expiresAt, updatedAt = :updatedAt",
+                ExpressionAttributeNames: { "#url": "url" },
+                ExpressionAttributeValues: {
+                  ":url": imageUrl,
+                  ":expiresAt": new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour expiration
+                  ":updatedAt": new Date().toISOString(),
+                },
+              })
+            );
+          }
+        }
 
         return {
-          id: item.id.S,
-          url,
-          label: item.label.SS || [],
-          createdAt: item.createdAt.S,
-          fileName: item.fileName.S,
+          id: item.id?.S,
+          url: imageUrl,
+          label: item.label?.S ?? "",
+          createdAt: item.createdAt?.S,
+          fileName: item.fileName?.S,
         };
       })
     );
 
-    if (!images?.length) {
-      return response(404, "No images found");
-    }
-
-    return response(200, images);
-  } catch (err) {
-    console.error("Error", err);
-    return response(500, "Fail to get images");
+    return response(200, {
+      images,
+      lastKey: data.LastEvaluatedKey
+        ? encodeURIComponent(JSON.stringify(data.LastEvaluatedKey))
+        : null,
+    });
+  } catch (error: any) {
+    console.error("Error", error);
+    return response(500, error?.message || "Fail to get images");
   }
 };
 
 /*
- * Upload an image to the S3 bucket and store the metadata in the DynamoDB table
+ * Upload an image to the S3 bucket and store metadata in DynamoDB
  */
 export const uploadImage = async (event: APIGatewayProxyEvent) => {
-  if (!event.body) {
-    return response(400, "Missing image data");
-  }
+  if (!event.body) return response(400, "Missing image data");
 
   try {
     const { fileName, contentType, base64Image } = JSON.parse(event.body);
@@ -70,11 +109,7 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
     const imageId = uuidv4();
     const s3Key = `${userId}/${imageId}/${fileName}`;
 
-    // Remove the data:image prefix if present
-    let imageData = base64Image;
-    if (base64Image.includes(",")) {
-      imageData = base64Image.split(",")[1];
-    }
+    let imageData = base64Image.includes(",") ? base64Image.split(",")[1] : base64Image;
 
     // Upload image to S3
     await s3.putObject({
@@ -84,139 +119,139 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
       ContentType: contentType,
     });
 
-    // Store image metadata in DynamoDB
-    const params = {
-      TableName: TABLE_NAME,
-      Item: {
-        id: { S: imageId },
-        userId: { S: userId },
-        s3key: { S: s3Key },
-        createdAt: { S: new Date().toISOString() },
-        fileName: { S: fileName },
-      },
-    };
-
-    await dynamodb.putItem(params);
-
-    // Generate a pre-signed URL for the uploaded image
-    const url = getSignedUrl(
-      s3,
-      new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key,
-      }),
-      { expiresIn: 3600 }
+    // Store metadata in DynamoDB
+    await dynamodb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          id: imageId,
+          userId: userId,
+          s3Key: s3Key,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          fileName: fileName,
+          isExternal: false,
+        },
+      })
     );
 
-    return response(200, { id: imageId, url, fileName });
+    return response(200, { id: imageId, fileName });
   } catch (error: any) {
     console.error(error);
-    return response(500, "Fail to upload image");
+    return response(500, error?.message || "Fail to upload image");
   }
 };
 
 /*
- * Label an image in the DynamoDB table
+ * Store external image metadata without downloading
  */
-export const labelImage = async (event: APIGatewayProxyEvent) => {
-  if (!event.body) {
-    return response(400, "Missing image data");
-  }
+export const storeExternalImage = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) return response(400, "Missing data");
 
   try {
-    const { id, labels } = JSON.parse(event.body);
+    const { imageUrl } = JSON.parse(event.body);
+    if (!imageUrl) return response(400, "Invalid image URL");
+
+    const userId = event.requestContext?.authorizer?.claims.sub;
+    const imageId = uuidv4();
+    const fileName = imageUrl.split("/").pop()?.split("?")[0] || `image-${imageId}.jpg`;
+
+    // Store metadata in DynamoDB
+    await dynamodb.send(
+      new PutCommand({
+        TableName: TABLE_NAME,
+        Item: {
+          id: imageId,
+          userId: userId,
+          url: imageUrl,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          fileName: fileName,
+          isExternal: true,
+        },
+      })
+    );
+
+    return response(200, { id: imageId, fileName });
+  } catch (error: any) {
+    console.error(error);
+    return response(500, error?.message || "Fail to store external image");
+  }
+};
+
+/*
+ * Update image metadata (label)
+ */
+export const labelImage = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) return response(400, "Missing image data");
+
+  try {
+    const { id, label } = JSON.parse(event.body);
     const params = {
       TableName: TABLE_NAME,
-      Key: {
-        id: { S: id },
-      },
-      UpdateExpression: "SET labels = :labels, updatedAt = :updatedAt",
+      Key: { id },
+      UpdateExpression: "SET label = :label, updatedAt = :updatedAt",
       ExpressionAttributeValues: {
-        ":labels": { SS: labels },
-        ":updatedAt": { S: new Date().toISOString() },
+        ":label": label,
+        ":updatedAt": new Date().toISOString(),
       },
       ReturnValues: "ALL_NEW" as ReturnValue,
     };
 
-    const result = await dynamodb.updateItem(params);
+    const result = await dynamodb.send(new UpdateCommand(params));
     const updatedItem = result.Attributes;
 
-    if (!updatedItem) {
-      return response(404, "Image not found");
-    }
+    if (!updatedItem) return response(404, "Image not found");
 
     return response(200, updatedItem);
   } catch (error: any) {
     console.error(error);
-    return response(500, "Fail to save labels");
+    return response(500, error?.message || "Fail to save labels");
   }
 };
 
 /*
- * Fetch external image
- */
-export const fetchImage = async (event: APIGatewayProxyEvent) => {
-  if (!event.body) {
-    return response(400, "Missing data");
-  }
+ * Delete nultiple images from S3 and DynamoDB
+  */
+export const deleteImages = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) return response(400, "Missing request body");
 
   try {
-    const { imageUrl } = JSON.parse(event.body);
-
-    // Fetch image from URL
-    const fetchResponse = await fetch(imageUrl);
-
-    if (!imageUrl || !fetchResponse.ok) {
-      return response(400, "Invalid image URL");
+    const { ids } = JSON.parse(event.body);
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return response(400, "Please provide a valid list of image IDs");
     }
+    const deletePromises = ids.map(async (id: string) => {
+      const { Item } = await dynamodb.send(
+        new GetCommand({
+          TableName: TABLE_NAME,
+          Key: { id },
+        })
+      );
 
-    const userId = event.requestContext?.authorizer?.claims.sub;
-    const imageId = uuidv4();
+      if (!Item) return;
 
-    // Extract filename from URL or generate one
-    const urlParts = imageUrl.split("/");
-    const fileName =
-      urlParts[urlParts.length - 1].split("?")[0] || `image-${imageId}.jpg`;
-    const s3Key = `${userId}/${imageId}/${fileName}`;
+      const s3Key = Item.s3Key?.S;
+      if (s3Key) {
+        await s3.deleteObject({
+          Bucket: BUCKET_NAME,
+          Key: s3Key,
+        });
+      }
 
-    const contentType =
-      fetchResponse.headers.get("content-type") || "image/jpeg";
-    const imageBuffer = await fetchResponse.arrayBuffer();
-
-    // Upload image to S3
-    await s3.putObject({
-      Bucket: BUCKET_NAME,
-      Key: s3Key,
-      Body: Buffer.from(imageBuffer),
-      ContentType: contentType,
+      await dynamodb.send(
+        new DeleteCommand({
+          TableName: TABLE_NAME,
+          Key: { id },
+        })
+      );
     });
 
-    // Store image metadata in DynamoDB
-    const params = {
-      TableName: TABLE_NAME,
-      Item: {
-        id: { S: imageId },
-        userId: { S: userId },
-        s3key: { S: s3Key },
-        createdAt: { S: new Date().toISOString() },
-        fileName: { S: fileName },
-      },
-    };
-    await dynamodb.putItem(params);
+    await Promise.all(deletePromises);
 
-    // Generate a pre-signed URL for the uploaded image
-    const url = getSignedUrl(
-      s3,
-      new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key,
-      }),
-      { expiresIn: 3600 }
-    );
-
-    return response(200, { id: imageId, url, fileName });
+    return response(200, "Images deleted successfully");
   } catch (error: any) {
     console.error(error);
-    return response(500, "Fail to fetch image");
+    return response(500, error?.message || "Fail to delete images");
   }
-};
+}
