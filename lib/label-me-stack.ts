@@ -196,8 +196,7 @@ export class LabelMeStack extends cdk.Stack {
       distribution,
       distributionPaths: ["/*"],
       metadata: {
-        API_BASE_URL: api.url ?? "",
-        API_NAME: api.restApiName ?? "",
+        VITE_API_BASE_URL: api.url ?? "",
       },
     });
 
