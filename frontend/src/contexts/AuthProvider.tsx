@@ -16,6 +16,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const decoded: tokenPayload = jwtDecode(token);
                 const currentTime = Math.floor(Date.now() / 1000);
 
+                // Notice user that the token will be expired in 10 seconds
+                if (decoded.exp - currentTime < 10) {
+                    notify("Token will be expired in 10 seconds", "warning");
+                }
+
                 if (decoded.exp < currentTime) {
                     console.warn("Token expired, logging out...");
                     logout();
