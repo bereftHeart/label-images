@@ -8,3 +8,14 @@ export type tokenPayload = {
     email: string;
     exp: number;
 }
+
+export type image = {
+    id: string;
+    fileName: string
+    url: string;
+    label: string;
+    createdAt: string;
+    createdBy: string;
+    updatedAt?: string;
+    updatedBy?: string;
+}

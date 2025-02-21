@@ -31,25 +31,25 @@ export class LabelMeStack extends cdk.Stack {
       ],
     });
 
-    // S3 bucket for hosting the frontend
-    const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
-      websiteIndexDocument: "index.html",
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
+    // // S3 bucket for hosting the frontend
+    // const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
+    //   websiteIndexDocument: "index.html",
+    //   blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    //   autoDeleteObjects: true,
+    // });
 
-    // CloudFront distribution for the frontend
-    const distribution = new cloudfront.Distribution(this, "Distribution", {
-      defaultBehavior: {
-        origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket),
-      },
-      additionalBehaviors: {
-        "/images/*": {
-          origin: origins.S3BucketOrigin.withOriginAccessIdentity(imageBucket),
-        },
-      },
-    });
+    // // CloudFront distribution for the frontend
+    // const distribution = new cloudfront.Distribution(this, "Distribution", {
+    //   defaultBehavior: {
+    //     origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket),
+    //   },
+    //   additionalBehaviors: {
+    //     "/images/*": {
+    //       origin: origins.S3BucketOrigin.withOriginAccessIdentity(imageBucket),
+    //     },
+    //   },
+    // });
 
     // DynamoDB table for storing image metadata
     const imageTable = new dynamodb.Table(this, "ImageTable", {
@@ -80,7 +80,7 @@ export class LabelMeStack extends cdk.Stack {
 
     // Log group for API Gateway
     const logGroup = new logs.LogGroup(this, "ApiLogGroup", {
-      logGroupName: `/aws/api/label-me`,
+      logGroupName: "/aws/api/label-me",
       retention: logs.RetentionDays.ONE_WEEK, // Keep logs for one week
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Remove logs when stack is deleted
     });
@@ -185,21 +185,21 @@ export class LabelMeStack extends cdk.Stack {
       authorizationOptions
     );
 
-    // Deploy frontend
-    new s3deploy.BucketDeployment(this, "DeployWebsite", {
-      sources: [s3deploy.Source.asset(".././frontend/dist")],
-      destinationBucket: websiteBucket,
-      distribution,
-      distributionPaths: ["/*"],
-      metadata: {
-        VITE_API_BASE_URL: api.url ?? "",
-      },
-    });
+    // // Deploy frontend
+    // new s3deploy.BucketDeployment(this, "DeployWebsite", {
+    //   sources: [s3deploy.Source.asset(".././frontend/dist")],
+    //   destinationBucket: websiteBucket,
+    //   distribution,
+    //   distributionPaths: ["/*"],
+    //   metadata: {
+    //     VITE_API_BASE_URL: api.url ?? "",
+    //   },
+    // });
 
-    // Outputs
-    new cdk.CfnOutput(this, "WebsiteURL", {
-      value: `https://${distribution.distributionDomainName}`,
-    });
+    // // Outputs
+    // new cdk.CfnOutput(this, "WebsiteURL", {
+    //   value: `https://${distribution.distributionDomainName}`,
+    // });
     new cdk.CfnOutput(this, "UserPoolId", {
       value: userPool.userPoolId,
     });

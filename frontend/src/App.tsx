@@ -6,12 +6,13 @@ import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
 import NotFoundPage from "./pages/NotFound";
 import Register from "./pages/Register";
+import UploadImage from "./pages/UploadImage";
 import Verification from "./pages/Verification";
 
 function App() {
   return (
     <Router>
-      <div className="relative h-screen overflow-y-scroll no-scrollbar ">
+      <div className="relative h-screen overflow-y-scroll">
         <ToastContainer />
         <Routes>
           <Route path="/" element={<Dashboard />} />
@@ -30,9 +31,10 @@ function App() {
               <Verification />
             </GuessGuard>
           } />
-          <Route path="/upload-images" element={<AuthGuard>
-            <Dashboard />
-          </AuthGuard>} />
+          <Route path="/upload-images" element={
+            <AuthGuard>
+              <UploadImage />
+            </AuthGuard>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>

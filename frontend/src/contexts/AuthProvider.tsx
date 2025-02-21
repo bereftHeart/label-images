@@ -1,5 +1,6 @@
 import { jwtDecode } from "jwt-decode";
 import React, { useEffect, useState } from "react";
+import { notify } from "../common/functions";
 import { loginCredentials, tokenPayload } from "../common/type";
 import userService from "../services/user";
 import { AuthContext } from "./AuthContext";
@@ -46,6 +47,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem("email");
             localStorage.removeItem("rememberMe");
         }
+
+        notify("Login successful", "success");
     };
 
     const logout = () => {

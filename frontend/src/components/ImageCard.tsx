@@ -1,0 +1,72 @@
+import { useContext, useState } from 'react'
+import { image } from '../common/type'
+import { AuthContext } from '../contexts/AuthContext'
+import labelImageService from '../services/image'
+import { useNavigate } from 'react-router-dom'
+import { notify } from '../common/functions'
+
+const ImageCard: React.FC<{ image: image }> = ({ image }) => {
+    const auth = useContext(AuthContext)
+    const navigate = useNavigate()
+
+    const [label, setLabel] = useState<string>(image.label)
+    const [loading, setLoading] = useState<boolean>(false)
+
+    const [updatedImage, setUpdatedImage] = useState<image>(image)
+
+    const handleLabel = async () => {
+        if (!auth?.user) navigate('/login')
+
+        setLoading(true)
+        try {
+            const response = await labelImageService.labelImage(image.id, label)
+            setUpdatedImage(response.data)
+
+            notify("Image labeled successfully", "success")
+        } catch (error) {
+            console.error(error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    return (
+        <div className="card card-compact bg-base-200 shadow-xl">
+            <figure>
+                <img
+                    className='w-full h-64 object-cover'
+                    src={updatedImage.url}
+                    alt={updatedImage.fileName}
+                />
+            </figure>
+            <div className="card-body">
+                <span className='text-info'>
+                    {`Uploaded (${new Date(updatedImage.createdAt).toLocaleString()}) by: ${updatedImage.createdBy ?? "Unknown"}`}
+                </span>
+
+                <span className='text-info'>
+                    {`Updated (${updatedImage.updatedAt ? new Date(updatedImage.updatedAt).toLocaleString() : "Unknown"}) by: ${updatedImage.updatedBy || "Unknown"}`}
+                </span>
+
+                <a className='w-fit text-accent cursor-pointer hover:opacity-75' target='blank' href={updatedImage.url}>View full image</a>
+
+                <div className='flex justify-between items-center'>
+                    <input
+                        type="text"
+                        placeholder={updatedImage.label ? "" : "Enter label here"}
+                        className='input input-bordered input-accent'
+                        value={label}
+                        onChange={(e) => setLabel(e.target.value)} />
+                    <button
+                        disabled={loading}
+                        className="btn btn-success"
+                        onClick={handleLabel}>
+                        Save label
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+export default ImageCard
