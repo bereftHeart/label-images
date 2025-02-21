@@ -88,10 +88,6 @@ export class LabelMeStack extends cdk.Stack {
     // API Gateway
     const api = new apigateway.RestApi(this, "ImageLabelingApi", {
       restApiName: "Image Labeling API",
-      deployOptions: {
-        accessLogDestination: new apigateway.LogGroupLogDestination(logGroup),
-        accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields(),
-      },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
@@ -191,7 +187,7 @@ export class LabelMeStack extends cdk.Stack {
 
     // Deploy frontend
     new s3deploy.BucketDeployment(this, "DeployWebsite", {
-      sources: [s3deploy.Source.asset("./frontend/build")],
+      sources: [s3deploy.Source.asset(".././frontend/dist")],
       destinationBucket: websiteBucket,
       distribution,
       distributionPaths: ["/*"],
