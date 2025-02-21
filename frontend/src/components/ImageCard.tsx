@@ -40,15 +40,21 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
                 />
             </figure>
             <div className="card-body">
-                <span className='text-info'>
-                    {`Uploaded (${new Date(updatedImage.createdAt).toLocaleString()}) by: ${updatedImage.createdBy ?? "Unknown"}`}
-                </span>
+                <div>
+                    <p className='text-info'>
+                        {`Uploaded (${new Date(updatedImage.createdAt).toLocaleString()}) by: `}
+                    </p>
+                    <p className='text-secondary'>{updatedImage.createdBy ?? "Unknown"}</p>
+                </div>
 
-                <span className='text-info'>
-                    {`Updated (${updatedImage.updatedAt ? new Date(updatedImage.updatedAt).toLocaleString() : "Unknown"}) by: ${updatedImage.updatedBy || "Unknown"}`}
-                </span>
+                <div>
+                    <p className='text-info'>
+                        {`Updated (${updatedImage.updatedAt ? new Date(updatedImage.updatedAt).toLocaleString() : "Unknown"}) by: `}
+                    </p>
+                    <p className='text-secondary'>{updatedImage.updatedBy ?? "Unknown"}</p>
+                </div>
 
-                <a className='w-fit text-accent cursor-pointer hover:opacity-75' target='blank' href={updatedImage.url}>View full image</a>
+                <a className='w-fit text-accent text-lg cursor-pointer hover:opacity-75' target='blank' href={updatedImage.url}>View full image</a>
 
                 <div className='flex justify-between items-center'>
                     <input
