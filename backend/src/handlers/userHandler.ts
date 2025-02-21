@@ -127,7 +127,6 @@ export const loginUser = async (event: APIGatewayProxyEvent) => {
     });
 
     const res = await cognito.send(command);
-    console.log("Login successful:", res.AuthenticationResult);
 
     if (!res.AuthenticationResult) {
       throw new Error("Failed to authenticate user");

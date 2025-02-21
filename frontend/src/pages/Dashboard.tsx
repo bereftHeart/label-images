@@ -16,7 +16,6 @@ const Dashboard: React.FC = () => {
         try {
             setLoading(true)
             const response = await labelImageService.getImages(12, lastEvaluatedKey)
-            console.log(response)
 
             setImages(prevImages => [...response?.data?.images, ...prevImages])
 

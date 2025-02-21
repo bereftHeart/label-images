@@ -22,7 +22,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 if (decoded.exp < currentTime) {
-                    console.warn("Token expired, logging out...");
                     logout();
                 } else {
                     setUser(decoded.email);
@@ -42,7 +41,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem("token", idToken);
 
         const decoded: tokenPayload = jwtDecode(idToken);
-        console.log("Login successful:", decoded);
         setUser(decoded.email);
 
         if (data.rememberMe) {
