@@ -26,12 +26,12 @@ const UploadImage: React.FC = () => {
             if (file) {
                 // Upload file
                 await labelImageService.uploadImage(file, label)
-                notify("Image uploaded successfully", "success")
             } else if (externalImageUrl) {
                 // Upload external image
                 await labelImageService.storeExternalImage(externalImageUrl, label)
             }
-
+            
+            notify("Image uploaded successfully", "success")
             navigate("/")
         } catch (error: any) {
             console.error(error)
