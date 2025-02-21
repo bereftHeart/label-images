@@ -72,7 +72,7 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
           View full image
         </a>
 
-        <div className="flex justify-between items-center gap-2">
+        <div className="flex w-full justify-between items-center gap-2">
           <input
             type="text"
             placeholder={updatedImage.label ? "" : "Enter label here"}
