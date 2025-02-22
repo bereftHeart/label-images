@@ -1,5 +1,10 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
-import { createUser, loginUser, resendVerificationCode, verifyUser } from "../handlers/userHandler";
+import {
+  createUser,
+  loginUser,
+  resendVerificationCode,
+  verifyUser,
+} from "../handlers/userHandler";
 import { response } from "../utils/response";
 
 export const lambdaHandler = async (event: APIGatewayProxyEvent) => {

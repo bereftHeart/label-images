@@ -5,7 +5,10 @@ import labelImageService from "../services/image";
 import { useNavigate } from "react-router-dom";
 import { notify } from "../common/functions";
 
-const ImageCard: React.FC<{ image: image }> = ({ image }) => {
+const ImageCard: React.FC<{ image: image; className?: string }> = ({
+  image,
+  className = "",
+}) => {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
 
@@ -31,7 +34,7 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
   };
 
   return (
-    <div className="card card-compact bg-base-200 shadow-xl">
+    <div className={`card card-compact bg-base-200 shadow-xl ${className}`}>
       <figure>
         <img
           className="w-full h-64 object-cover"
@@ -43,7 +46,7 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
         <div>
           <p className="text-info">
             {`Uploaded (${new Date(
-              updatedImage.createdAt
+              updatedImage.createdAt,
             ).toLocaleString()}) by: `}
           </p>
           <p className="text-secondary">
@@ -56,7 +59,7 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
             {`Updated (${
               updatedImage.updatedAt
                 ? new Date(updatedImage.updatedAt).toLocaleString()
-                : "Unknown"
+                : "N/A"
             }) by: `}
           </p>
           <p className="text-secondary">
@@ -76,7 +79,7 @@ const ImageCard: React.FC<{ image: image }> = ({ image }) => {
           <input
             type="text"
             placeholder={updatedImage.label ? "" : "Enter label here"}
-            className="input input-bordered input-accent"
+            className="input input-bordered input-accent w-full"
             value={label}
             onChange={(e) => setLabel(e.target.value)}
           />

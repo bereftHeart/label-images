@@ -1,13 +1,16 @@
 import {
+  BatchWriteItemCommand,
   DynamoDB,
   ReturnValue,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
+import { GetObjectCommand, S3 } from "@aws-sdk/client-s3";
 import {
-  GetObjectCommand,
-  S3
-} from "@aws-sdk/client-s3";
-import { BatchWriteCommand, DeleteCommand, GetCommand, PutCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
+  DeleteCommand,
+  GetCommand,
+  PutCommand,
+  UpdateCommand,
+} from "@aws-sdk/lib-dynamodb";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { v4 as uuidv4 } from "uuid";
@@ -19,6 +22,8 @@ const TABLE_NAME = process.env.TABLE_NAME || "ImageTable";
 const BUCKET_NAME = process.env.BUCKET_NAME || "ImageBucket";
 
 interface inputImageData {
+  id?: string;
+  s3Key?: string;
   fileName: string;
   label?: string;
   contentType: string;
@@ -61,7 +66,7 @@ export const getImages = async (event: APIGatewayProxyEvent) => {
                 Bucket: BUCKET_NAME,
                 Key: item.s3Key?.S,
               }),
-              { expiresIn: 3600 }
+              { expiresIn: 3600 },
             );
 
             // Update DynamoDB with new signed URL and expiration
@@ -74,9 +79,11 @@ export const getImages = async (event: APIGatewayProxyEvent) => {
                 ExpressionAttributeNames: { "#url": "url" },
                 ExpressionAttributeValues: {
                   ":url": imageUrl,
-                  ":expiresAt": new Date(Date.now() + 3600 * 1000).toISOString(), // 1 hour expiration
+                  ":expiresAt": new Date(
+                    Date.now() + 3600 * 1000,
+                  ).toISOString(), // 1 hour expiration
                 },
-              })
+              }),
             );
           }
         }
@@ -91,7 +98,7 @@ export const getImages = async (event: APIGatewayProxyEvent) => {
           updatedBy: item.updatedBy?.S,
           fileName: item.fileName?.S,
         };
-      })
+      }),
     );
 
     images.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
@@ -115,18 +122,23 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
   if (!event.body) return response(400, "Missing image data");
 
   try {
-    const { fileName, contentType, base64Image, label } = JSON.parse(event.body) as inputImageData;
+    const { fileName, contentType, base64Image, label } = JSON.parse(
+      event.body,
+    ) as inputImageData;
 
     if (!fileName || !contentType || !base64Image) {
       return response(400, "Invalid image data");
     }
 
     const userId = event.requestContext?.authorizer?.claims.sub;
-    const userName = event.requestContext?.authorizer?.claims["cognito:username"];
+    const userName =
+      event.requestContext?.authorizer?.claims["cognito:username"];
     const imageId = uuidv4();
     const s3Key = `${userId}/${imageId}/${fileName}`;
 
-    let imageData = base64Image.includes(",") ? base64Image.split(",")[1] : base64Image;
+    let imageData = base64Image.includes(",")
+      ? base64Image.split(",")[1]
+      : base64Image;
 
     // Upload image to S3
     await s3.putObject({
@@ -150,7 +162,7 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
           isExternal: false,
           label: label || "",
         },
-      })
+      }),
     );
 
     return response(200, { id: imageId, fileName });
@@ -171,9 +183,11 @@ export const storeExternalImage = async (event: APIGatewayProxyEvent) => {
     if (!imageUrl) return response(400, "Invalid image URL");
 
     const userId = event.requestContext?.authorizer?.claims.sub;
-    const userName = event.requestContext?.authorizer?.claims["cognito:username"];
+    const userName =
+      event.requestContext?.authorizer?.claims["cognito:username"];
     const imageId = uuidv4();
-    const fileName = imageUrl.split("/").pop()?.split("?")[0] || `image-${imageId}.jpg`;
+    const fileName =
+      imageUrl.split("/").pop()?.split("?")[0] || `image-${imageId}.jpg`;
 
     // Store metadata in DynamoDB
     await dynamodb.send(
@@ -189,7 +203,7 @@ export const storeExternalImage = async (event: APIGatewayProxyEvent) => {
           isExternal: true,
           label: label || "",
         },
-      })
+      }),
     );
 
     return response(200, { id: imageId, fileName });
@@ -207,11 +221,13 @@ export const labelImage = async (event: APIGatewayProxyEvent) => {
 
   try {
     const { id, label } = JSON.parse(event.body);
-    const userName = event.requestContext?.authorizer?.claims["cognito:username"];
+    const userName =
+      event.requestContext?.authorizer?.claims["cognito:username"];
     const params = {
       TableName: TABLE_NAME,
       Key: { id },
-      UpdateExpression: "SET label = :label, updatedAt = :updatedAt, updatedBy = :updatedBy",
+      UpdateExpression:
+        "SET label = :label, updatedAt = :updatedAt, updatedBy = :updatedBy",
       ExpressionAttributeValues: {
         ":label": label,
         ":updatedAt": new Date().toISOString(),
@@ -233,8 +249,8 @@ export const labelImage = async (event: APIGatewayProxyEvent) => {
 };
 
 /*
- * Delete nultiple images from S3 and DynamoDB
-  */
+ * Delete multiple images from S3 and DynamoDB
+ */
 export const deleteImages = async (event: APIGatewayProxyEvent) => {
   if (!event.body) return response(400, "Missing request body");
 
@@ -248,7 +264,7 @@ export const deleteImages = async (event: APIGatewayProxyEvent) => {
         new GetCommand({
           TableName: TABLE_NAME,
           Key: { id },
-        })
+        }),
       );
 
       if (!Item) return;
@@ -265,7 +281,7 @@ export const deleteImages = async (event: APIGatewayProxyEvent) => {
         new DeleteCommand({
           TableName: TABLE_NAME,
           Key: { id },
-        })
+        }),
       );
     });
 
@@ -276,11 +292,11 @@ export const deleteImages = async (event: APIGatewayProxyEvent) => {
     console.error(error);
     return response(500, error?.message || "Fail to delete images");
   }
-}
+};
 
 /*
-* Bulk upload images
-*/
+ * Bulk upload images
+ */
 export const uploadImages = async (event: APIGatewayProxyEvent) => {
   try {
     const body = JSON.parse(event.body || "{}");
@@ -291,41 +307,68 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
 
     const now = new Date().toISOString();
     const userId = event.requestContext?.authorizer?.claims.sub;
-    const userName = event.requestContext?.authorizer?.claims["cognito:username"];
+    const userName =
+      event.requestContext?.authorizer?.claims["cognito:username"];
 
-    // Prepare batch write requests for DynamoDB
-    const putRequests = body.images.map((image: inputImageData) => {
+    const images = body.images.map((image: inputImageData) => {
       const imageId = uuidv4();
-      return ({
-        PutRequest: {
-          Item: {
-            id: { S: imageId },
-            userId: { S: userId },
-            fileName: { S: image.fileName },
-            createdAt: { S: now },
-            createdBy: { S: userName },
-            label: { S: image.label ?? "" },
-            s3Key: { S: `${userId}/${imageId}/${image.fileName}` },
-            isExternal: { BOOL: false }
-          },
-        },
-      })
-    }
+      const s3Key = `${userId}/${imageId}/${image.fileName}`;
+      return {
+        ...image,
+        id: imageId,
+        s3Key,
+      };
+    });
+
+    await Promise.all(
+      images.map(async (image: inputImageData) => {
+        let imageData = image.base64Image.includes(",")
+          ? image.base64Image.split(",")[1]
+          : image.base64Image;
+
+        await s3.putObject({
+          Bucket: BUCKET_NAME,
+          Key: image.s3Key,
+          Body: Buffer.from(imageData, "base64"),
+          ContentType: image.contentType,
+        });
+      }),
     );
 
-    // Write to DynamoDB in batches of 25 (DynamoDB limit)
+    const putRequests = images.map((image: inputImageData) => ({
+      PutRequest: {
+        Item: {
+          id: { S: image.id },
+          fileName: { S: image.fileName },
+          userId: { S: userId },
+          s3Key: { S: image.s3Key },
+          createdAt: { S: now },
+          createdBy: { S: userName },
+          isExternal: { BOOL: false },
+          label: { S: image.label || "" },
+        },
+      },
+    }));
+
+    const batchWritePromises = [];
     for (let i = 0; i < putRequests.length; i += 25) {
-      const batch = putRequests.slice(i, i + 25);
-      await dynamodb.send(
-        new BatchWriteCommand({
-          RequestItems: {
-            [TABLE_NAME]: batch,
-          },
-        })
+      batchWritePromises.push(
+        dynamodb.send(
+          new BatchWriteItemCommand({
+            RequestItems: {
+              [TABLE_NAME]: putRequests.slice(i, i + 25),
+            },
+          }),
+        ),
       );
     }
 
-    return response(201, { message: "Images uploaded successfully", count: putRequests.length });
+    await Promise.all(batchWritePromises);
+
+    return response(201, {
+      message: "Images uploaded successfully",
+      count: putRequests.length,
+    });
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     return response(500, error?.message || "Fail to upload images");

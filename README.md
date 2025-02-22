@@ -43,7 +43,7 @@ Because AWS CDK is provided in a language that supports OOP(Object-Oriented Prog
 
 ### AWS Account & IAM User
 
-First of all, AWS Account and IAM User is required. IAM user's credential keys also are requried.
+First of all, AWS Account and IAM User is required. IAM user's credential keys also are required.
 
 ### Dependencies
 
@@ -107,8 +107,6 @@ Config .env file with your account
 ```
 CDK_DEFAULT_ACCOUNT = your-account-id
 CDK_DEFAULT_REGION = your-region
-CLIENT_ID = your-client-id
-USER_POOL_ID = your-user-pool-id
 ```
 
 ---
@@ -217,7 +215,7 @@ aws s3 website s3://your-bucket-name/ --index-document index.html
 Sync the `dist/` folder with your S3 bucket:
 
 ```sh
-aws s3 sync dist/ s3://your-bucket-name/ -
+aws s3 sync dist/ s3://your-bucket-name/
 ```
 
 Your app should now be accessible at:

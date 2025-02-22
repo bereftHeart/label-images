@@ -3,13 +3,13 @@ import {
   ConfirmSignUpCommand,
   InitiateAuthCommand,
   ResendConfirmationCodeCommand,
-  SignUpCommand
+  SignUpCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { response } from "../utils/response";
 
 const cognito = new CognitoIdentityProviderClient({
-  region: process.env.CDK_DEFAULT_REGION || "ap-northeast-1",
+  region: process.env.CDK_DEFAULT_REGION || "ap-east-1",
 });
 
 const CLIENT_ID = process.env.CLIENT_ID!;
@@ -22,9 +22,13 @@ export const createUser = async (event: APIGatewayProxyEvent) => {
     return response(400, "Missing request body");
   }
   try {
-    const { email, password } = JSON.parse(event.body);
-    if (!email || !password) {
+    const { email, password, clientId } = JSON.parse(event.body);
+    if (!email || !password || !clientId) {
       return response(400, "Missing required fields");
+    }
+
+    if (clientId !== CLIENT_ID) {
+      return response(400, "Invalid client ID");
     }
 
     const command = new SignUpCommand({
@@ -36,7 +40,10 @@ export const createUser = async (event: APIGatewayProxyEvent) => {
 
     await cognito.send(command);
 
-    return response(200, "User created successfully. Please verify your email.");
+    return response(
+      200,
+      "User created successfully. Please verify your email.",
+    );
   } catch (error: any) {
     if (error.name === "UsernameExistsException") {
       return response(409, "User already exists");
@@ -54,9 +61,13 @@ export const verifyUser = async (event: APIGatewayProxyEvent) => {
     return response(400, "Missing request body");
   }
   try {
-    const { email, code } = JSON.parse(event.body);
-    if (!email || !code) {
+    const { email, code, clientId } = JSON.parse(event.body);
+    if (!email || !code || !clientId) {
       return response(400, "Missing required fields");
+    }
+
+    if (clientId !== CLIENT_ID) {
+      return response(400, "Invalid client ID");
     }
 
     const command = new ConfirmSignUpCommand({
@@ -78,19 +89,23 @@ export const verifyUser = async (event: APIGatewayProxyEvent) => {
     console.error(error);
     return response(400, error?.message || "Failed to verify user");
   }
-}
+};
 
 /*
-  * Resend Verification Code
-  */
+ * Resend Verification Code
+ */
 export const resendVerificationCode = async (event: APIGatewayProxyEvent) => {
   if (!event.body) {
     return response(400, "Missing request body");
   }
   try {
-    const { email } = JSON.parse(event.body);
+    const { email, clientId } = JSON.parse(event.body);
     if (!email) {
       return response(400, "Missing required fields");
+    }
+
+    if (clientId !== CLIENT_ID) {
+      return response(400, "Invalid client ID");
     }
 
     const command = new ResendConfirmationCodeCommand({
@@ -103,9 +118,12 @@ export const resendVerificationCode = async (event: APIGatewayProxyEvent) => {
     return response(200, "Verification code resent successfully.");
   } catch (error: any) {
     console.error(error);
-    return response(400, error?.message || "Failed to resend verification code");
+    return response(
+      400,
+      error?.message || "Failed to resend verification code",
+    );
   }
-}
+};
 
 /*
  * Login a user
@@ -115,9 +133,13 @@ export const loginUser = async (event: APIGatewayProxyEvent) => {
     return response(400, "Missing request body");
   }
   try {
-    const { email, password } = JSON.parse(event.body);
-    if (!email || !password) {
+    const { email, password, clientId } = JSON.parse(event.body);
+    if (!email || !password || !clientId) {
       return response(400, "Missing required fields");
+    }
+
+    if (clientId !== CLIENT_ID) {
+      return response(400, "Invalid client ID");
     }
 
     const command = new InitiateAuthCommand({

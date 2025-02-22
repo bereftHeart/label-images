@@ -7,11 +7,13 @@
     "dev": "vite --port 3000 --open",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@hookform/resolvers": "^4.1.0",
     "axios": "^1.7.9",
+    "eslint-plugin-prettier": "^5.2.3",
     "jwt-decode": "^4.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

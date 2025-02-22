@@ -31,13 +31,13 @@ export class LabelMeStack extends cdk.Stack {
       ],
     });
 
-    // // S3 bucket for hosting the frontend
-    // const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
-    //   websiteIndexDocument: "index.html",
-    //   blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
-    //   autoDeleteObjects: true,
-    // });
+    // S3 bucket for hosting the frontend
+    const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
+      websiteIndexDocument: "index.html",
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+    });
 
     // // CloudFront distribution for the frontend
     // const distribution = new cloudfront.Distribution(this, "Distribution", {
@@ -101,7 +101,7 @@ export class LabelMeStack extends cdk.Stack {
       {
         cognitoUserPools: [userPool],
         identitySource: "method.request.header.Authorization",
-      }
+      },
     );
 
     const authorizationOptions = {
@@ -122,7 +122,7 @@ export class LabelMeStack extends cdk.Stack {
           BUCKET_NAME: imageBucket.bucketName,
         },
         logRetention: logs.RetentionDays.ONE_WEEK,
-      }
+      },
     );
 
     const userFunction = new NodejsFunction(this, "UserFunction", {
@@ -152,7 +152,7 @@ export class LabelMeStack extends cdk.Stack {
       labelImagesFunction,
       {
         proxy: true,
-      }
+      },
     );
 
     const userIntegration = new apigateway.LambdaIntegration(userFunction, {
@@ -174,15 +174,18 @@ export class LabelMeStack extends cdk.Stack {
       .addResource("upload")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource
-      .addResource("bulk-delete")
+      .addResource("external")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource
-      .addResource("external")
+      .addResource("bulk-upload")
+      .addMethod("POST", labelImagesIntegration, authorizationOptions);
+    imagesResource
+      .addResource("bulk-delete")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource.addMethod(
       "PUT",
       labelImagesIntegration,
-      authorizationOptions
+      authorizationOptions,
     );
 
     // // Deploy frontend
@@ -193,6 +196,7 @@ export class LabelMeStack extends cdk.Stack {
     //   distributionPaths: ["/*"],
     //   metadata: {
     //     VITE_API_BASE_URL: api.url ?? "",
+    //     VITE_CLIENT_ID: userPoolClient.userPoolClientId,
     //   },
     // });
 
