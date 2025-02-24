@@ -251,7 +251,7 @@ export const deleteImages = async (event: APIGatewayProxyEvent) => {
 
       if (!Item) return;
 
-      const s3Key = Item.s3Key?.S;
+      const s3Key = Item.s3Key;
       if (s3Key) {
         await s3.deleteObject({
           Bucket: BUCKET_NAME,
@@ -316,7 +316,6 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
     );
 
     return response(200, { uploadUrls: signedUrls });
-
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     return response(500, error?.message || "Fail to upload images");

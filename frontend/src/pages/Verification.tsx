@@ -43,18 +43,13 @@ const Verification: React.FC = () => {
   const onSubmit = async (data: any) => {
     try {
       setLoading(true);
-      const response = await userService.verifyUser({
+      await userService.verifyUser({
         email: state.email,
         code: data.code,
       });
 
-      if (response.status === 200) {
-        notify(
-          response?.data?.message ?? "Verify success. You can login now",
-          "success",
-        );
-        navigate("/login");
-      }
+      notify("Verify success. You can login now", "success");
+      navigate("/login");
     } catch (error: any) {
       console.error(error);
       setError("code", {
@@ -70,11 +65,9 @@ const Verification: React.FC = () => {
     try {
       setCountdown(60);
       setCanResend(false);
-      const response = await userService.resendVerification(state.email);
+      await userService.resendVerification(state.email);
 
-      if (response.status === 200) {
-        notify(response?.data?.message ?? "Verification code sent", "success");
-      }
+      notify("Verification code sent", "success");
     } catch (error: any) {
       console.error(error);
       setError("code", {

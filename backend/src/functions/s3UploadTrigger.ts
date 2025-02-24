@@ -25,8 +25,6 @@ export const lambdaHandler = async (event: S3Event) => {
         }),
       );
 
-      console.log("headObjectResponse", headObjectResponse);
-
       const s3Metadata = headObjectResponse.Metadata || {};
       const [userId, imageId, fileName] = key.split("/");
 
@@ -62,8 +60,6 @@ export const lambdaHandler = async (event: S3Event) => {
 
       await dynamodb.send(new BatchWriteCommand(batchWriteParams));
     }
-
-    console.log("Successfully processed S3 event:", event);
   } catch (error: any) {
     console.error("S3 Upload Trigger Error:", error);
     throw error;

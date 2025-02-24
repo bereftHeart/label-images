@@ -110,6 +110,27 @@ export class LabelMeStack extends cdk.Stack {
       authorizationType: apigateway.AuthorizationType.COGNITO,
     };
 
+    // Add CORS headers for 4xx and 5xx responses
+    api.addGatewayResponse("GatewayResponse4xx", {
+      type: apigateway.ResponseType.DEFAULT_4XX,
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Methods": "'OPTIONS,GET,POST,PUT,DELETE'",
+        "Access-Control-Allow-Headers":
+          "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'",
+      },
+    });
+
+    api.addGatewayResponse("GatewayResponse5xx", {
+      type: apigateway.ResponseType.DEFAULT_5XX,
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Methods": "'OPTIONS,GET,POST,PUT,DELETE'",
+        "Access-Control-Allow-Headers":
+          "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'",
+      },
+    });
+
     // Lambda functions
     const labelImagesFunction = new NodejsFunction(
       this,

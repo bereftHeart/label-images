@@ -18,7 +18,10 @@ const ImageCard: React.FC<{ image: image; className?: string }> = ({
   const [updatedImage, setUpdatedImage] = useState<image>(image);
 
   const handleLabel = async () => {
-    if (!auth?.user) navigate("/login");
+    if (!auth?.user) {
+      navigate("/login");
+      return;
+    }
 
     setLoading(true);
     try {

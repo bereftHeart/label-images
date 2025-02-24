@@ -40,13 +40,11 @@ const Register: React.FC = () => {
   const onSubmit = async (data: any) => {
     try {
       setLoading(true);
-      const respone = await userService.register(data);
+      await userService.register(data);
 
-      if (respone.status === 200) {
-        navigate("/verify", {
-          state: { email: data.email },
-        });
-      }
+      navigate("/verify", {
+        state: { email: data.email },
+      });
     } catch (error: any) {
       console.error(error);
       setError("email", {
