@@ -4,7 +4,7 @@ import {
   ReturnValue,
   ScanCommand,
 } from "@aws-sdk/client-dynamodb";
-import { GetObjectCommand, S3 } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand, S3 } from "@aws-sdk/client-s3";
 import {
   DeleteCommand,
   GetCommand,
@@ -27,7 +27,6 @@ interface inputImageData {
   fileName: string;
   label?: string;
   contentType: string;
-  base64Image: string;
 }
 
 /*
@@ -122,53 +121,36 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
   if (!event.body) return response(400, "Missing image data");
 
   try {
-    const { fileName, contentType, base64Image, label } = JSON.parse(
-      event.body,
-    ) as inputImageData;
+    const body = JSON.parse(event.body || "{}");
+    const { fileName, contentType, label } = body;
 
-    if (!fileName || !contentType || !base64Image) {
+    if (!fileName || !contentType) {
       return response(400, "Invalid image data");
     }
 
     const userId = event.requestContext?.authorizer?.claims.sub;
     const userName =
       event.requestContext?.authorizer?.claims["cognito:username"];
+
     const imageId = uuidv4();
     const s3Key = `${userId}/${imageId}/${fileName}`;
 
-    let imageData = base64Image.includes(",")
-      ? base64Image.split(",")[1]
-      : base64Image;
-
-    // Upload image to S3
-    await s3.putObject({
+    // Generate presigned URL for PUT operation
+    const putCommand = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: s3Key,
-      Body: Buffer.from(imageData, "base64"),
       ContentType: contentType,
+      Metadata: { label: label ?? "", userName },
     });
 
-    // Store metadata in DynamoDB
-    await dynamodb.send(
-      new PutCommand({
-        TableName: TABLE_NAME,
-        Item: {
-          id: imageId,
-          fileName: fileName,
-          userId: userId,
-          s3Key: s3Key,
-          createdAt: new Date().toISOString(),
-          createdBy: userName,
-          isExternal: false,
-          label: label || "",
-        },
-      }),
-    );
+    const presignedUrl = await getSignedUrl(s3, putCommand, {
+      expiresIn: 300,
+    });
 
-    return response(200, { id: imageId, fileName });
+    return response(200, { id: imageId, uploadUrl: presignedUrl });
   } catch (error: any) {
     console.error(error);
-    return response(500, error?.message || "Fail to upload image");
+    return response(500, error?.message || "Failed to generate upload URL");
   }
 };
 
@@ -305,7 +287,6 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
       return response(400, "Invalid request: No images provided");
     }
 
-    const now = new Date().toISOString();
     const userId = event.requestContext?.authorizer?.claims.sub;
     const userName =
       event.requestContext?.authorizer?.claims["cognito:username"];
@@ -320,55 +301,22 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
       };
     });
 
-    await Promise.all(
+    // Generate Pre-Signed URLs
+    const signedUrls = await Promise.all(
       images.map(async (image: inputImageData) => {
-        let imageData = image.base64Image.includes(",")
-          ? image.base64Image.split(",")[1]
-          : image.base64Image;
-
-        await s3.putObject({
+        const putCommand = new PutObjectCommand({
           Bucket: BUCKET_NAME,
           Key: image.s3Key,
-          Body: Buffer.from(imageData, "base64"),
           ContentType: image.contentType,
+          Metadata: { label: image.label || "", userName },
         });
+
+        return await getSignedUrl(s3, putCommand, { expiresIn: 1800 });
       }),
     );
 
-    const putRequests = images.map((image: inputImageData) => ({
-      PutRequest: {
-        Item: {
-          id: { S: image.id },
-          fileName: { S: image.fileName },
-          userId: { S: userId },
-          s3Key: { S: image.s3Key },
-          createdAt: { S: now },
-          createdBy: { S: userName },
-          isExternal: { BOOL: false },
-          label: { S: image.label || "" },
-        },
-      },
-    }));
+    return response(200, { uploadUrls: signedUrls });
 
-    const batchWritePromises = [];
-    for (let i = 0; i < putRequests.length; i += 25) {
-      batchWritePromises.push(
-        dynamodb.send(
-          new BatchWriteItemCommand({
-            RequestItems: {
-              [TABLE_NAME]: putRequests.slice(i, i + 25),
-            },
-          }),
-        ),
-      );
-    }
-
-    await Promise.all(batchWritePromises);
-
-    return response(201, {
-      message: "Images uploaded successfully",
-      count: putRequests.length,
-    });
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     return response(500, error?.message || "Fail to upload images");

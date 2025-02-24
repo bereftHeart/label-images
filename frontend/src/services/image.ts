@@ -1,5 +1,4 @@
 import axios from "axios";
-import { convertAndEncodeImage } from "../common/functions";
 
 class LabelImageService {
   private readonly IMAGE_URL = `${import.meta.env.VITE_API_BASE_URL}/label-images`;
@@ -22,25 +21,38 @@ class LabelImageService {
   async uploadImage(file: File, label?: string) {
     const filename = file.name;
     const contentType = file.type;
-    const base64Image = await convertAndEncodeImage(file);
-    return await this.api.post("/upload", {
+
+    // Get presigned URL
+    const presignedResponse = await this.api.post("/upload", {
       filename,
       contentType,
-      base64Image,
       label,
+    });
+
+    // Upload directly to S3 using presigned URL
+    await axios.put(presignedResponse.data.uploadUrl, file, {
+      headers: { "Content-Type": contentType },
     });
   }
 
   async uploadImages(files: File[]) {
-    const images = await Promise.all(
-      files.map(async (file) => ({
-        fileName: file.name,
-        contentType: file.type,
-        base64Image: await convertAndEncodeImage(file),
-      }))
-    );
+    const images = files.map((file) => ({
+      fileName: file.name,
+      contentType: file.type,
+    }));
 
-    return await this.api.post("/bulk-upload", { images });
+    // Get presigned URLs for all images
+    const response = await this.api.post("/bulk-upload", { images });
+    const uploadUrls = response.data.uploadUrls;
+
+    // Upload images to S3 using presigned URLs
+    await Promise.all(
+      files.map(async (file, index) => {
+        await axios.put(uploadUrls[index], file, {
+          headers: { "Content-Type": file.type },
+        });
+      }),
+    );
   }
 
   async storeExternalImage(imageUrl: string, label?: string) {

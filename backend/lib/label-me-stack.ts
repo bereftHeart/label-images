@@ -32,12 +32,12 @@ export class LabelMeStack extends cdk.Stack {
     });
 
     // S3 bucket for hosting the frontend
-    const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
-      websiteIndexDocument: "index.html",
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-    });
+    // const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
+    //   websiteIndexDocument: "index.html",
+    //   blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
+    //   autoDeleteObjects: true,
+    // });
 
     // // CloudFront distribution for the frontend
     // const distribution = new cloudfront.Distribution(this, "Distribution", {
@@ -134,9 +134,32 @@ export class LabelMeStack extends cdk.Stack {
       logRetention: logs.RetentionDays.ONE_WEEK,
     });
 
+    const uploadNotificationLambda = new NodejsFunction(
+      this,
+      "S3UploadTriggerFunction",
+      {
+        entry: "src/functions/s3UploadTrigger.ts",
+        handler: "lambdaHandler",
+        environment: {
+          TABLE_NAME: imageTable.tableName,
+        },
+        logRetention: logs.RetentionDays.ONE_WEEK,
+      },
+    );
+
+    // Grant Lambda permissions to trigger on S3 events
+    imageBucket.addEventNotification(
+      s3.EventType.OBJECT_CREATED,
+      new cdk.aws_s3_notifications.LambdaDestination(uploadNotificationLambda),
+    );
+
+    imageBucket.grantRead(uploadNotificationLambda);
+    imageTable.grantWriteData(uploadNotificationLambda);
+
     // Grant Lambda permissions to write logs
     logGroup.grantWrite(labelImagesFunction);
     logGroup.grantWrite(userFunction);
+    logGroup.grantWrite(uploadNotificationLambda);
 
     // Grant Lambda permissions to access DynamoDB
     imageTable.grantReadWriteData(labelImagesFunction);

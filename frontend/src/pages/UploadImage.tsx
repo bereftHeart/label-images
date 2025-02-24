@@ -106,7 +106,9 @@ const UploadImage: React.FC = () => {
           >
             Upload
           </button>
-          <Link to="/bulk-upload" className="text-info underline">Upload multiple file here</Link>
+          <Link to="/bulk-upload" className="text-info underline">
+            Upload multiple file here
+          </Link>
         </div>
       </div>
     </div>
