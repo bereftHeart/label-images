@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { notify } from "../common/functions";
 import labelImageService from "../services/image";
-import { useNavigate } from "react-router-dom";
 
 const BulkUpload: React.FC = () => {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [uploading, setUploading] = useState<boolean>(false);
-  const navigate = useNavigate();
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -28,7 +26,9 @@ const BulkUpload: React.FC = () => {
       setUploading(true);
       await labelImageService.uploadImages(selectedFiles);
       notify("Images uploaded successfully!", "success");
-      navigate("/");
+
+      setSelectedFiles([]);
+      setPreviewImages([]);
     } catch (error: any) {
       console.error(error);
       notify(error?.response?.data?.message || "Upload failed", "error");

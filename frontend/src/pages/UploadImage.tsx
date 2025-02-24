@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { notify } from "../common/functions";
 import labelImageService from "../services/image";
 
@@ -9,7 +9,6 @@ const UploadImage: React.FC = () => {
   const [label, setLabel] = useState<string>("");
   const [uploading, setUploading] = useState(false);
 
-  const navigate = useNavigate();
 
   // Handle file change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -32,7 +31,11 @@ const UploadImage: React.FC = () => {
       }
 
       notify("Image uploaded successfully", "success");
-      navigate("/");
+
+      setFile(null);
+      setExternalImageUrl("");
+      setLabel("");
+
     } catch (error: any) {
       console.error(error);
       notify(error?.response?.data?.message || "Fail to upload image", "error");
