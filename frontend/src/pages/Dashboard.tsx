@@ -44,7 +44,7 @@ const Dashboard: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchImages();
+    setTimeout(fetchImages, 500)
   }, []);
 
   //   Select images to delete
@@ -134,7 +134,7 @@ const Dashboard: React.FC = () => {
               ))
             ) : (
               <div className="w-full h-full text-center text-xl">
-                {loading ? "Loading..." : "No images found"}
+                {loading ? <span className="loading loading-spinner text-accent"></span> : "No images found"}
               </div>
             )}
           </div>
