@@ -129,7 +129,7 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
     }
 
     const userId = event.requestContext?.authorizer?.claims.sub;
-    const userName =
+    const username =
       event.requestContext?.authorizer?.claims["cognito:username"];
 
     const imageId = uuidv4();
@@ -140,7 +140,7 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
       Bucket: BUCKET_NAME,
       Key: s3Key,
       ContentType: contentType,
-      Metadata: { label: label ?? "", userName },
+      Metadata: { label: label ?? "", username },
     });
 
     const presignedUrl = await getSignedUrl(s3, putCommand, {

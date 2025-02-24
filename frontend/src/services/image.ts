@@ -19,12 +19,12 @@ class LabelImageService {
   }
 
   async uploadImage(file: File, label?: string) {
-    const filename = file.name;
+    const fileName = file.name;
     const contentType = file.type;
 
     // Get presigned URL
     const presignedResponse = await this.api.post("/upload", {
-      filename,
+      fileName,
       contentType,
       label,
     });

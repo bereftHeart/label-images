@@ -107,9 +107,8 @@ const Dashboard: React.FC = () => {
                       />
                       <ImageCard
                         image={image}
-                        className={`hover:-mt-2 transition-all duration-200 ease-linear ${
-                          selectedImages.includes(image.id) ? "opacity-60" : ""
-                        }`}
+                        className={`w-full hover:-mt-2 transition-all duration-200 ease-linear ${selectedImages.includes(image.id) ? "opacity-60" : ""
+                          }`}
                       />
                       {selectedImages.includes(image.id) && (
                         <div className="badge absolute -top-2 -right-2 badge-error gap-2 text-white">

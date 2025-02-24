@@ -91,6 +91,7 @@ export class LabelMeStack extends cdk.Stack {
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
         allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
       },
     });
 
@@ -153,9 +154,6 @@ export class LabelMeStack extends cdk.Stack {
       new cdk.aws_s3_notifications.LambdaDestination(uploadNotificationLambda),
     );
 
-    imageBucket.grantRead(uploadNotificationLambda);
-    imageTable.grantWriteData(uploadNotificationLambda);
-
     // Grant Lambda permissions to write logs
     logGroup.grantWrite(labelImagesFunction);
     logGroup.grantWrite(userFunction);
@@ -163,9 +161,11 @@ export class LabelMeStack extends cdk.Stack {
 
     // Grant Lambda permissions to access DynamoDB
     imageTable.grantReadWriteData(labelImagesFunction);
+    imageTable.grantWriteData(uploadNotificationLambda);
 
     // Grant Lambda permissions to access S3
     imageBucket.grantReadWrite(labelImagesFunction);
+    imageBucket.grantRead(uploadNotificationLambda);
 
     // API endpoints
     const imagesResource = api.root.addResource("label-images");

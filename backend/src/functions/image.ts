@@ -11,6 +11,10 @@ import { response } from "../utils/response";
 
 export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
   try {
+    if (event.httpMethod === "OPTIONS") {
+      return response(200, "OK");
+    }
+
     switch (event.httpMethod) {
       case "GET":
         return await getImages(event);

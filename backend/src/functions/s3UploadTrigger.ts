@@ -36,7 +36,7 @@ export const lambdaHandler = async (event: S3Event) => {
         userId: userId,
         s3Key: key,
         createdAt: new Date().toISOString(),
-        createdBy: s3Metadata.userName || "Unknown",
+        createdBy: s3Metadata.username || "Unknown",
         isExternal: false,
         label: s3Metadata.label || "",
       };
