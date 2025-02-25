@@ -59,7 +59,7 @@ class LabelImageService {
     // Upload images to S3 using presigned URLs
     await Promise.all(
       files.map(async (file, index) => {
-        await axios.put(uploadUrls[index], file, {
+        await axios.put(uploadUrls[index].uploadUrl, file, {
           headers: { "Content-Type": file.type },
         });
       }),
