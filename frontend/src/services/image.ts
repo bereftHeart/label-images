@@ -54,7 +54,7 @@ class LabelImageService {
 
     // Get presigned URLs for all images
     const response = await this.api.post("/bulk-upload", { images });
-    const uploadUrls = response.data.uploadUrls;
+    const uploadUrls = response.data.signedUrls;
 
     // Upload images to S3 using presigned URLs
     await Promise.all(
@@ -67,7 +67,7 @@ class LabelImageService {
 
     // Confirm upload to server
     await this.api.post("/confirm-upload", {
-      data: response.data.map((item: any, index: number) => ({
+      data: uploadUrls.map((item: any, index: number) => ({
         ...item,
         fileName: files[index].name,
       }))

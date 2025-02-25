@@ -315,7 +315,7 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
       }),
     );
 
-    return response(200, signedUrls);
+    return response(200, { signedUrls });
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     return response(500, error?.message || "Fail to upload images");
