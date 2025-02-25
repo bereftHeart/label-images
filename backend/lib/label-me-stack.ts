@@ -1,55 +1,17 @@
 import * as cdk from "aws-cdk-lib";
 import * as apigateway from "aws-cdk-lib/aws-apigateway";
-import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
-import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as cognito from "aws-cdk-lib/aws-cognito";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as s3 from "aws-cdk-lib/aws-s3";
-import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
 import { Construct } from "constructs";
+import * as dotenv from "dotenv";
+
+dotenv.config();
 
 export class LabelMeStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
-
-    // S3 bucket for storing images
-    const imageBucket = new s3.Bucket(this, "ImageBucket", {
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      autoDeleteObjects: true,
-      cors: [
-        {
-          allowedMethods: [
-            s3.HttpMethods.GET,
-            s3.HttpMethods.PUT,
-            s3.HttpMethods.POST,
-          ],
-          allowedOrigins: ["*"],
-          allowedHeaders: ["*"],
-        },
-      ],
-    });
-
-    // S3 bucket for hosting the frontend
-    // const websiteBucket = new s3.Bucket(this, "WebsiteBucket", {
-    //   websiteIndexDocument: "index.html",
-    //   blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-    //   removalPolicy: cdk.RemovalPolicy.DESTROY,
-    //   autoDeleteObjects: true,
-    // });
-
-    // // CloudFront distribution for the frontend
-    // const distribution = new cloudfront.Distribution(this, "Distribution", {
-    //   defaultBehavior: {
-    //     origin: origins.S3BucketOrigin.withOriginAccessIdentity(websiteBucket),
-    //   },
-    //   additionalBehaviors: {
-    //     "/images/*": {
-    //       origin: origins.S3BucketOrigin.withOriginAccessIdentity(imageBucket),
-    //     },
-    //   },
-    // });
 
     // DynamoDB table for storing image metadata
     const imageTable = new dynamodb.Table(this, "ImageTable", {
@@ -81,7 +43,7 @@ export class LabelMeStack extends cdk.Stack {
     // Log group for API Gateway
     const logGroup = new logs.LogGroup(this, "ApiLogGroup", {
       logGroupName: "/aws/api/label-me",
-      retention: logs.RetentionDays.ONE_WEEK, // Keep logs for one week
+      retention: logs.RetentionDays.ONE_DAY, // Keep logs for one day
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Remove logs when stack is deleted
     });
 
@@ -141,9 +103,12 @@ export class LabelMeStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(10),
         environment: {
           TABLE_NAME: imageTable.tableName,
-          BUCKET_NAME: imageBucket.bucketName,
+          CF_ACCOUNT_ID: process.env.CF_ACCOUNT_ID!,
+          CF_ACCESS_KEY_ID: process.env.CF_ACCESS_KEY_ID!,
+          CF_SECRET_ACCESS_KEY: process.env.CF_SECRET_ACCESS_KEY!,
+          BUCKET_NAME: process.env.BUCKET_NAME!,
         },
-        logRetention: logs.RetentionDays.ONE_WEEK,
+        logRetention: logs.RetentionDays.ONE_DAY,
       },
     );
 
@@ -153,40 +118,15 @@ export class LabelMeStack extends cdk.Stack {
       environment: {
         CLIENT_ID: userPoolClient.userPoolClientId,
       },
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logRetention: logs.RetentionDays.ONE_DAY,
     });
-
-    const uploadNotificationLambda = new NodejsFunction(
-      this,
-      "S3UploadTriggerFunction",
-      {
-        entry: "src/functions/s3UploadTrigger.ts",
-        handler: "lambdaHandler",
-        environment: {
-          TABLE_NAME: imageTable.tableName,
-        },
-        logRetention: logs.RetentionDays.ONE_WEEK,
-      },
-    );
-
-    // Grant Lambda permissions to trigger on S3 events
-    imageBucket.addEventNotification(
-      s3.EventType.OBJECT_CREATED,
-      new cdk.aws_s3_notifications.LambdaDestination(uploadNotificationLambda),
-    );
 
     // Grant Lambda permissions to write logs
     logGroup.grantWrite(labelImagesFunction);
     logGroup.grantWrite(userFunction);
-    logGroup.grantWrite(uploadNotificationLambda);
 
     // Grant Lambda permissions to access DynamoDB
     imageTable.grantReadWriteData(labelImagesFunction);
-    imageTable.grantWriteData(uploadNotificationLambda);
-
-    // Grant Lambda permissions to access S3
-    imageBucket.grantReadWrite(labelImagesFunction);
-    imageBucket.grantRead(uploadNotificationLambda);
 
     // API endpoints
     const imagesResource = api.root.addResource("label-images");
@@ -218,6 +158,9 @@ export class LabelMeStack extends cdk.Stack {
       .addResource("upload")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource
+      .addResource("confirm-upload")
+      .addMethod("POST", labelImagesIntegration, authorizationOptions);
+    imagesResource
       .addResource("external")
       .addMethod("POST", labelImagesIntegration, authorizationOptions);
     imagesResource
@@ -232,22 +175,6 @@ export class LabelMeStack extends cdk.Stack {
       authorizationOptions,
     );
 
-    // // Deploy frontend
-    // new s3deploy.BucketDeployment(this, "DeployWebsite", {
-    //   sources: [s3deploy.Source.asset(".././frontend/dist")],
-    //   destinationBucket: websiteBucket,
-    //   distribution,
-    //   distributionPaths: ["/*"],
-    //   metadata: {
-    //     VITE_API_BASE_URL: api.url ?? "",
-    //     VITE_CLIENT_ID: userPoolClient.userPoolClientId,
-    //   },
-    // });
-
-    // // Outputs
-    // new cdk.CfnOutput(this, "WebsiteURL", {
-    //   value: `https://${distribution.distributionDomainName}`,
-    // });
     new cdk.CfnOutput(this, "UserPoolId", {
       value: userPool.userPoolId,
     });

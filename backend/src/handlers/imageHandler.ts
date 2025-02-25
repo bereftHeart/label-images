@@ -1,11 +1,11 @@
 import {
-  BatchWriteItemCommand,
   DynamoDB,
   ReturnValue,
-  ScanCommand,
+  ScanCommand
 } from "@aws-sdk/client-dynamodb";
-import { GetObjectCommand, PutObjectCommand, S3 } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import {
+  BatchWriteCommand,
   DeleteCommand,
   GetCommand,
   PutCommand,
@@ -15,11 +15,11 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { APIGatewayProxyEvent } from "aws-lambda";
 import { v4 as uuidv4 } from "uuid";
 import { response } from "../utils/response";
+import { s3 } from "../utils/s3";
 
 const dynamodb = new DynamoDB({});
-const s3 = new S3({});
 const TABLE_NAME = process.env.TABLE_NAME || "ImageTable";
-const BUCKET_NAME = process.env.BUCKET_NAME || "ImageBucket";
+const BUCKET_NAME = process.env.BUCKET_NAME || "image";
 
 interface inputImageData {
   id?: string;
@@ -65,7 +65,7 @@ export const getImages = async (event: APIGatewayProxyEvent) => {
                 Bucket: BUCKET_NAME,
                 Key: item.s3Key?.S,
               }),
-              { expiresIn: 3600 },
+              { expiresIn: 86400 },
             );
 
             // Update DynamoDB with new signed URL and expiration
@@ -115,22 +115,20 @@ export const getImages = async (event: APIGatewayProxyEvent) => {
 };
 
 /*
- * Upload an image to the S3 bucket and store metadata in DynamoDB
+ * Generate pre-signed url to upload an image to the R2 bucket
  */
 export const uploadImage = async (event: APIGatewayProxyEvent) => {
   if (!event.body) return response(400, "Missing image data");
 
   try {
     const body = JSON.parse(event.body || "{}");
-    const { fileName, contentType, label } = body;
+    const { fileName, contentType } = body;
 
     if (!fileName || !contentType) {
       return response(400, "Invalid image data");
     }
 
     const userId = event.requestContext?.authorizer?.claims.sub;
-    const username =
-      event.requestContext?.authorizer?.claims["cognito:username"];
 
     const imageId = uuidv4();
     const s3Key = `${userId}/${imageId}/${fileName}`;
@@ -140,14 +138,13 @@ export const uploadImage = async (event: APIGatewayProxyEvent) => {
       Bucket: BUCKET_NAME,
       Key: s3Key,
       ContentType: contentType,
-      Metadata: { label: label ?? "", username },
     });
 
     const presignedUrl = await getSignedUrl(s3, putCommand, {
       expiresIn: 300,
     });
 
-    return response(200, { id: imageId, uploadUrl: presignedUrl });
+    return response(200, { id: imageId, uploadUrl: presignedUrl, s3Key });
   } catch (error: any) {
     console.error(error);
     return response(500, error?.message || "Failed to generate upload URL");
@@ -251,11 +248,10 @@ export const deleteImages = async (event: APIGatewayProxyEvent) => {
 
       if (!Item) return;
 
-      const s3Key = Item.s3Key;
-      if (s3Key) {
+      if (Item.s3Key) {
         await s3.deleteObject({
           Bucket: BUCKET_NAME,
-          Key: s3Key,
+          Key: Item.s3Key,
         });
       }
 
@@ -311,13 +307,64 @@ export const uploadImages = async (event: APIGatewayProxyEvent) => {
           Metadata: { label: image.label || "", userName },
         });
 
-        return await getSignedUrl(s3, putCommand, { expiresIn: 1800 });
+        return {
+          id: image.id,
+          uploadUrl: await getSignedUrl(s3, putCommand, { expiresIn: 300 }),
+          s3Key: image.s3Key,
+        };
       }),
     );
 
-    return response(200, { uploadUrls: signedUrls });
+    return response(200, signedUrls);
   } catch (error: any) {
     console.error("Upload Images Error:", error);
     return response(500, error?.message || "Fail to upload images");
   }
 };
+
+/*
+* Confirm upload success and store metadata in DynamoDB
+*/
+export const confirmUpload = async (event: APIGatewayProxyEvent) => {
+  if (!event.body) return response(400, "Missing image data");
+
+  try {
+    const body = JSON.parse(event.body || "{}");
+    const items = body?.data as inputImageData[];
+
+    const userId = event.requestContext?.authorizer?.claims.sub;
+    const userName =
+      event.requestContext?.authorizer?.claims["cognito:username"];
+
+    const batchWritePromises = [];
+    const batchSize = 25;
+    for (let i = 0; i < items.length; i += batchSize) {
+      const params = {
+        RequestItems: {
+          [TABLE_NAME]: items.slice(i, i + batchSize).map((item: inputImageData) => ({
+            PutRequest: {
+              Item: {
+                id: item.id,
+                s3Key: item.s3Key,
+                fileName: item.fileName,
+                userId: userId,
+                createdAt: new Date().toISOString(),
+                createdBy: userName,
+                isExternal: false,
+                label: item.label || "",
+              },
+            },
+          }))
+        }
+      }
+      batchWritePromises.push(dynamodb.send(new BatchWriteCommand(params)));
+    }
+
+    await Promise.all(batchWritePromises);
+
+    return response(200, "Images uploaded successfully");
+  } catch (error: any) {
+    console.error(error);
+    return response(500, error?.message || "Failed to store image metadata");
+  }
+}

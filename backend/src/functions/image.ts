@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent } from "aws-lambda";
 import {
+  confirmUpload,
   deleteImages,
   getImages,
   labelImage,
@@ -23,6 +24,10 @@ export const lambdaHandler = async (event: APIGatewayProxyEvent) => {
 
         if (path === "/label-images/upload") {
           return await uploadImage(event);
+        }
+
+        if (path === "/label-images/confirm-upload") {
+          return await confirmUpload(event);
         }
 
         if (path === "/label-images/external") {

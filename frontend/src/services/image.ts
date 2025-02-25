@@ -26,13 +26,24 @@ class LabelImageService {
     const presignedResponse = await this.api.post("/upload", {
       fileName,
       contentType,
-      label,
     });
 
     // Upload directly to S3 using presigned URL
     await axios.put(presignedResponse.data.uploadUrl, file, {
       headers: { "Content-Type": contentType },
     });
+
+    // Confirm upload to server
+    await this.api.post("/confirm-upload", {
+      data: [
+        {
+          id: presignedResponse.data.id,
+          fileName,
+          s3Key: presignedResponse.data.s3Key,
+          label
+        }
+      ]
+    })
   }
 
   async uploadImages(files: File[]) {
@@ -53,6 +64,14 @@ class LabelImageService {
         });
       }),
     );
+
+    // Confirm upload to server
+    await this.api.post("/confirm-upload", {
+      data: response.data.map((item: any, index: number) => ({
+        ...item,
+        fileName: files[index].name,
+      }))
+    });
   }
 
   async storeExternalImage(imageUrl: string, label?: string) {
